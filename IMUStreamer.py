@@ -1,5 +1,5 @@
+import sys
 from abc import ABC, abstractmethod
-import xme
 import AwindaHelper as AwH
 from xdpchandler import *
 from time import sleep
@@ -7,6 +7,7 @@ from pynput import keyboard as pyKey
 import keyboard
 import queue
 from datetime import datetime
+import xsensdeviceapi as xda
 
 
 class IMUManager(ABC):
@@ -54,6 +55,7 @@ class DotManager(IMUManager):
     To guarantee heading accuracy and, therefore, to avoid drift in orientation data, the
     sensors must be kept still at the beginning of the measurement for 2-3 seconds.
     """
+
     def __init__(self):
         super().__init__()
         self.xdpcHandler = XdpcHandler()
@@ -102,9 +104,11 @@ class DotManager(IMUManager):
                     packet = self.xdpcHandler.getNextPacket(device.portInfo().bluetoothAddress())
                     if packet.containsOrientation():
                         euler = packet.orientationEuler()
-                        self.put_in_queue(DotPacket(device.bluetoothAddress(), packet.sampleTimeFine(), datetime.now(), (euler.x(), euler.y(), euler.z(), euler.pitch(), euler.yaw(), euler.roll())))
+                        self.put_in_queue(DotPacket(device.bluetoothAddress(), packet.sampleTimeFine(), datetime.now(),
+                                                    (euler.x(), euler.y(), euler.z(), euler.pitch(), euler.yaw(),
+                                                     euler.roll())))
 
-                #print("%s" % s, flush=True)
+                # print("%s" % s, flush=True)
         self.stop_streaming()
 
     def stop_streaming(self):
@@ -179,88 +183,168 @@ class DotManager(IMUManager):
 class AwindaManager(IMUManager):
     def __init__(self):
         super().__init__()
-        self.license = xme.XmeLicense()
-        self.awindaChannel = 15
-        self.mvnFileName = 'mvn_outfile.mvn'
-        self.xmeControl = xme.XmeControl()
-        self.cb = AwH.MyXmeCallbacks(self.xmeControl)
-        self.xmeControl.addCallbackHandler(self.cb)
+        self.desired_update_rate = 75
+        self.desired_radio_channel = 15
 
-        self.version = self.xmeControl.version()
-        print("XmeControl construction successful, XME version %s.%s.%s " % (
-            self.version.major(), self.version.minor(), self.version.revision()))
+        self.wireless_master_callback = AwH.WirelessMasterCallback()
+        self.mtw_callbacks = []
 
-        print("Using channel", self.awindaChannel, "for Awinda communication")
-        print("Using file", self.mvnFileName, "for recording")
-
-        self.xmeControl.setLogAllLiveData(r"C:\Users\u0166698\PycharmProjects\ExoSensorStream\Streamers\mvnLiveData")
+        print("Constructing XsControl...")
+        self.control = xda.XsControl.construct()
+        if self.control is None:
+            print("Failed to construct XsControl instance.")
+            sys.exit(1)
 
     def init_sensors(self):
-        self.xmeControl.setConfiguration("LowerBody")
+        print("Scanning ports...")
 
-        print("Starting scan (press q to quit)")
-        self.xmeControl.setScanMode(True)
-        self.xmeControl.setRealTimePoseMode(True)
-        while not self.xmeControl.status().isConnected():
-            with pyKey.Events() as events:
-                # Block at most one second
-                event = events.get(1)
-                if event is not None and event.key == pyKey.Events.Press(pyKey.KeyCode.from_char("q")).key:
-                    print('Exiting program...')
-                    AwH.exitClean(0, self.xmeControl)
-                else:
-                    pass
+        detected_devices = xda.XsScanner_scanPorts()
 
-        self.xmeControl.setRealTimePoseMode(False)
-        self.xmeControl.setScanMode(False)
+        print("Finding wireless master...")
+        wireless_master_port = next((port for port in detected_devices if port.deviceId().isWirelessMaster()), None)
+        if wireless_master_port is None:
+            raise RuntimeError("No wireless masters found")
 
-        self.xmeControl.setBodyDimension("bodyHeight", 1.78)  # todo make this use input()
-        self.xmeControl.setBodyDimension("footSize", 0.32)
+        print(f"Wireless master found @ {wireless_master_port}")
 
-        while not self.cb.calibrationComplete:
-            event = events.get(1)
-            if event is not None and event.key == pyKey.Events.Press(pyKey.KeyCode.from_char("q")).key:
-                print('Exiting program...')
-                AwH.exitClean(0, self.xmeControl)
-            else:
-                pass
+        print("Opening port...")
+        if not self.control.openPort(wireless_master_port.portName(), wireless_master_port.baudrate()):
+            raise RuntimeError(f"Failed to open port {wireless_master_port}")
 
-        AwH.performCalibration(self.xmeControl, self.cb, "Npose")
-        AwH.displayCalibrationResults(self.xmeControl.calibrationResult("Npose"))
+        print("Getting XsDevice instance for wireless master...")
+        self.wireless_master_device = self.control.device(wireless_master_port.deviceId())
+        if self.wireless_master_device is None:
+            raise RuntimeError(f"Failed to construct XsDevice instance: {wireless_master_port}")
 
-        while not self.cb.calibrationComplete:
-            event = events.get(1)
-            if event is not None and event.key == pyKey.Events.Press(pyKey.KeyCode.from_char("q")).key:
-                print('Exiting program...')
-                AwH.exitClean(0, self.xmeControl)
-            else:
-                pass
+        print(f"XsDevice instance created @ {self.wireless_master_device}")
+
+        print("Setting config mode...")
+        if not self.wireless_master_device.gotoConfig():
+            raise RuntimeError(f"Failed to goto config mode: {self.wireless_master_device}")
+
+        print("Attaching callback handler...")
+        self.wireless_master_device.addCallbackHandler(self.wireless_master_callback)
+
+        print("Getting the list of the supported update rates...")
+        supportUpdateRates = xda.XsDevice.supportedUpdateRates(self.wireless_master_device, xda.XDI_None)
+
+        print("Supported update rates: ", end="")
+        for rate in supportUpdateRates:
+            print(rate, end=" ")
+        print()
+
+        new_update_rate = AwH.find_closest_update_rate(supportUpdateRates, self.desired_update_rate)
+
+        print(f"Setting update rate to {new_update_rate} Hz...")
+
+        if not self.wireless_master_device.setUpdateRate(new_update_rate):
+            raise RuntimeError(f"Failed to set update rate: {self.wireless_master_device}")
+
+        print("Disabling radio channel if previously enabled...")
+
+        if self.wireless_master_device.isRadioEnabled():
+            if not self.wireless_master_device.disableRadio():
+                raise RuntimeError(f"Failed to disable radio channel: {self.wireless_master_device}")
+
+        print(f"Setting radio channel to {self.desired_radio_channel} and enabling radio...")
+        if not self.wireless_master_device.enableRadio(self.desired_radio_channel):
+            raise RuntimeError(f"Failed to set radio channel: {self.wireless_master_device}")
+
+        print("Waiting for MTW to wirelessly connect...\n")
+
+
+        wait_for_connections = True
+        connected_mtw_count = len(self.wireless_master_callback.getWirelessMTWs())
+        while wait_for_connections:
+            time.sleep(0.1)
+            next_count = len(self.wireless_master_callback.getWirelessMTWs())
+            if next_count != connected_mtw_count:
+                print(f"Number of connected MTWs: {next_count}. Press Y to stop searching for devices.")
+                connected_mtw_count = next_count
+            wait_for_connections = not keyboard.is_pressed('y')
 
     def start_streaming(self):
-        go = input("Press <Enter> to start recording")
+        print("Starting measurement...")
+        if not self.wireless_master_device.gotoMeasurement():
+            raise RuntimeError(f"Failed to goto measurement mode: {self.wireless_master_device}")
 
-        self.xmeControl.createMvnFile(self.mvnFileName)
-        self.xmeControl.startRecording()
+        print("Getting XsDevice instances for all MTWs...")
+        all_device_ids = self.control.deviceIds()
+        mtw_device_ids = [device_id for device_id in all_device_ids if device_id.isMtw()]
+        mtw_devices = []
+        for device_id in mtw_device_ids:
+            mtw_device = self.control.device(device_id)
+            if mtw_device is not None:
+                mtw_devices.append(mtw_device)
+            else:
+                raise RuntimeError("Failed to create an MTW XsDevice instance")
 
-        # Wait until it starts recording, so we can start the countdown.
-        while not self.cb.recordingStarted:
-            sleep(0.01)
+        print("Attaching callback handlers to MTWs...")
+        mtw_callbacks = [AwH.MtwCallback(i, mtw_devices[i]) for i in range(len(mtw_devices))]
+        for i in range(len(mtw_devices)):
+            mtw_devices[i].addCallbackHandler(mtw_callbacks[i])
 
-        # Record for 10 seconds
-        seconds = 10
-        while seconds > 0:
-            print("Recording for another %d seconds" % seconds)
-            sleep(1)
-            seconds -= 1
+        print("Creating a log file...")
+        logFileName = "logfile.mtb"
+        if self.wireless_master_device.createLogFile(logFileName) != xda.XRV_OK:
+            raise RuntimeError("Failed to create a log file. Aborting.")
+        else:
+            print("Created a log file: %s" % logFileName)
 
-        self.xmeControl.stopRecording()
-        while self.xmeControl.status().isRecordingOrFlushing():
-            sleep(0.01)
+        print("Starting recording...")
+        ready_to_record = False
 
-        self.xmeControl.saveAndCloseFile()
-        self.xmeControl.disconnectHardware()
+        while not ready_to_record:
+            ready_to_record = all([mtw_callbacks[i].dataAvailable() for i in range(len(mtw_callbacks))])
+            if not ready_to_record:
+                print("Waiting for data available...")
+                time.sleep(0.5)
+            # optional, enable heading reset before recording data, make sure all sensors have aligned physically the
+            # same heading!! else: print("Do heading reset before recording data, make sure all sensors have aligned
+            # physically the same heading!!") all([mtw_devices[i].resetOrientation(xda.XRM_Heading) for i in range(
+            # len(mtw_callbacks))])
 
-        AwH.exitClean(0, self.xmeControl)
+        if not self.wireless_master_device.startRecording():
+            raise RuntimeError("Failed to start recording. Aborting.")
+
+        print("\nMain loop. Press any key to quit\n")
+        print("Waiting for data available...")
+
+        euler_data = [xda.XsEuler()] * len(mtw_callbacks)
+        print_counter = 0
+        while True:
+            time.sleep(0)
+            if keyboard.is_pressed('q'):
+                self.stop_streaming()
+
+            new_data_available = False
+            for i in range(len(mtw_callbacks)):
+                if mtw_callbacks[i].dataAvailable():
+                    new_data_available = True
+                    packet = mtw_callbacks[i].getOldestPacket()
+                    euler_data[i] = packet.orientationEuler()
+                    mtw_callbacks[i].deleteOldestPacket()
+
+            if new_data_available:
+                # print only 1/x of the data in the screen.
+                if print_counter % 1 == 0:
+                    for i in range(len(mtw_callbacks)):
+                        print(f"[{i}]: ID: {mtw_callbacks[i].device().deviceId()}, "
+                              f"Roll: {euler_data[i].x():7.2f}, "
+                              f"Pitch: {euler_data[i].y():7.2f}, "
+                              f"Yaw: {euler_data[i].z():7.2f}")
+
+                print_counter += 1
 
     def stop_streaming(self):
-        pass
+        print("Setting config mode...")
+        if not self.wireless_master_device.gotoConfig():
+            raise RuntimeError(f"Failed to goto config mode: {self.wireless_master_device}")
+
+        print("Disabling radio...")
+        if not self.wireless_master_device.disableRadio():
+            raise RuntimeError(f"Failed to disable radio: {self.wireless_master_device}")
+
+imu_manager = AwindaManager()
+imu_manager.init_sensors()
+imu_manager.start_streaming()
