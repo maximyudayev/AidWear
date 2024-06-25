@@ -1,7 +1,7 @@
 # Create the callbacks
 from collections import deque
 
-import xme
+#import xme
 from time import sleep
 import xsensdeviceapi as xda
 from threading import Lock
@@ -53,7 +53,7 @@ class MtwCallback(xda.XsCallback):
             self.m_packetBuffer.append(packet)
             if len(self.m_packetBuffer) > 300:
                 self.deleteOldestPacket()
-class MyXmeCallbacks(xme.XmeCallback):
+'''class MyXmeCallbacks(xme.XmeCallback):
     def __init__(self, xme_ctrl):
         super(MyXmeCallbacks, self).__init__()
         self.calibrationAborted = False
@@ -175,7 +175,7 @@ class MyXmeCallbacks(xme.XmeCallback):
         print("Progress update in category %s: %d" % (category, percentage))
 
     def onProcessingProgress(this, dev, stage, firstFrame, lastFrame):
-        print("Processing pgress update: stage %d, %d --> %d" % (stage, firstFrame, lastFrame))
+        print("Processing pgress update: stage %d, %d --> %d" % (stage, firstFrame, lastFrame))'''
 
 
 def performCalibration(xmeControl, cb, calibrationType=""):
@@ -230,7 +230,7 @@ def performCalibration(xmeControl, cb, calibrationType=""):
     print("Done with calibration...")
 
 
-def displayCalibrationResults(calibrationResult=xme.XmeCalibrationResult()):
+'''def displayCalibrationResults(calibrationResult=xme.XmeCalibrationResult()):
     quality = calibrationResult.m_quality
     qualityString = ""
 
@@ -251,15 +251,15 @@ def displayCalibrationResults(calibrationResult=xme.XmeCalibrationResult()):
     if len(warnings) != 0:
         print("Received warnings: ")
         for warning in warnings:
-            print(warning)
+            print(warning)'''
 
 
-def exitClean(rv, xmeControl):
+'''def exitClean(rv, xmeControl):
     if xmeControl:
         xmeControl.setScanMode(False)
         sleep(0.1)
     xme.xmeTerminate()
-    exit(rv)
+    exit(rv)'''
 
 class WirelessMasterCallback(xda.XsCallback):
     def __init__(self):

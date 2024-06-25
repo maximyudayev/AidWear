@@ -1,5 +1,8 @@
 import sys
 from abc import ABC, abstractmethod
+
+import movelladot_pc_sdk.movelladot_pc_sdk_py38_64
+
 import AwindaHelper as AwH
 from xdpchandler import *
 from time import sleep
@@ -40,7 +43,7 @@ class IMUManager(ABC):
         pass
 
 
-class DotPacket:
+class IMUPacket:
     def __init__(self, sensor_id, timestamp, arrival_time, data):
         self.sensor_id = sensor_id
         self.timestamp = timestamp
@@ -67,7 +70,7 @@ class DotManager(IMUManager):
         # Start live data output. Make sure root node is last to go to measurement.
         print("Putting devices into measurement mode.")
         for device in self.xdpcHandler.connectedDots():
-            if not device.startMeasurement(movelladot_pc_sdk.XsPayloadMode_ExtendedEuler):
+            if not device.startMeasurement(movelladot_pc_sdk.movelladot_pc_sdk_py38_64.XsPayloadMode_RateQuantitieswMag):
                 print(f"Could not put device into measurement mode. Reason: {device.lastResultText()}")
                 continue
 
@@ -102,11 +105,11 @@ class DotManager(IMUManager):
                 for device in self.xdpcHandler.connectedDots():
                     # Retrieve a packet
                     packet = self.xdpcHandler.getNextPacket(device.portInfo().bluetoothAddress())
-                    if packet.containsOrientation():
-                        euler = packet.orientationEuler()
-                        self.put_in_queue(DotPacket(device.bluetoothAddress(), packet.sampleTimeFine(), datetime.now(),
-                                                    (euler.x(), euler.y(), euler.z(), euler.pitch(), euler.yaw(),
-                                                     euler.roll())))
+                    acc = packet.calibratedAcceleration()
+                    gyr = packet.containsCalibratedGyroscopeData()
+                    mag = packet.containsCalibratedMagneticField()
+                    self.put_in_queue(IMUPacket(device.bluetoothAddress(), packet.sampleTimeFine(), datetime.now(),
+                                                (acc, gyr, mag)))
 
                 # print("%s" % s, flush=True)
         self.stop_streaming()
@@ -329,6 +332,7 @@ class AwindaManager(IMUManager):
                 # print only 1/x of the data in the screen.
                 if print_counter % 1 == 0:
                     for i in range(len(mtw_callbacks)):
+                        self.put_in_queue(IMUPacket(mtw_callbacks[i].device().deviceId(), timestamp, datetime.now(), euler_data))
                         print(f"[{i}]: ID: {mtw_callbacks[i].device().deviceId()}, "
                               f"Roll: {euler_data[i].x():7.2f}, "
                               f"Pitch: {euler_data[i].y():7.2f}, "
@@ -345,6 +349,6 @@ class AwindaManager(IMUManager):
         if not self.wireless_master_device.disableRadio():
             raise RuntimeError(f"Failed to disable radio: {self.wireless_master_device}")
 
-imu_manager = AwindaManager()
-imu_manager.init_sensors()
-imu_manager.start_streaming()
+#imu_manager = AwindaManager()
+#imu_manager.init_sensors()
+#imu_manager.start_streaming()
