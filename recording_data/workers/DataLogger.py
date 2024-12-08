@@ -200,6 +200,7 @@ class DataLogger(Worker):
         msg = deserialize(payload)
         topic_tree: list[str] = topic.decode('utf-8').split('.')
         self._streams[topic_tree[0]].append_data(**msg)
+        print(self._streams[topic_tree[0]].get_fps())
       
       if self._killsig in poll_res[0]:
         # TODO: wait until every stream receives the "last" message to save everything 
@@ -487,7 +488,6 @@ class DataLogger(Worker):
       # Create a list of column entries to write.
       # Note that they should match the heading order in _init_writing_csv().
       to_write = []
-      to_write.append(new_data['time_str'][entry_index])
       to_write.append(new_data['time_s'][entry_index])
       data_toWrite = new_data['data'][entry_index]
       if isinstance(data_toWrite, (list, tuple)):
