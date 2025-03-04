@@ -33,6 +33,10 @@ class BrokerInterface(ABC):
     pass
 
   @abstractmethod
+  def _start(self) -> None:
+    pass
+
+  @abstractmethod
   def _set_state(self, state) -> None:
     pass
 
@@ -104,6 +108,7 @@ class BrokerState(ABC):
 class StartState(BrokerState):
   def run(self) -> None:
     self._context._activate_poller()
+    self._context._start()
     self._context._set_state(SyncState(self._context))
 
   def is_continue(self) -> bool:

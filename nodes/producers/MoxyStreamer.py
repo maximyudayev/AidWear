@@ -34,7 +34,7 @@ class CustomAntNode(AntNode):
             self.devices.add(id)
       except queue.Empty as _:
         pass
-    if len(self.devices) == 3:
+    if len(self.devices) == 1:
       return True
     else:
       return False
@@ -42,13 +42,14 @@ class CustomAntNode(AntNode):
 
 class MoxyStreamer(Producer):
   @property
-  def _log_source_tag(self) -> str:
+  def _log_source_tag() -> str:
     return 'moxy'
 
 
   def __init__(self,
                logging_spec: dict,
                devices: list[str],
+               transmit_delay_sample_period_s: float = 1.0,
                sampling_rate_hz: float = 0.5,
                port_pub: str = PORT_BACKEND,
                port_sync: str = PORT_SYNC,
@@ -60,7 +61,8 @@ class MoxyStreamer(Producer):
     self._devices = devices
     stream_info = {
       "devices": devices,
-      "sampling_rate_hz": sampling_rate_hz
+      "sampling_rate_hz": sampling_rate_hz,
+      "transmit_delay_sample_period_s" : transmit_delay_sample_period_s,
     }
 
     super().__init__(stream_info=stream_info,
@@ -77,7 +79,10 @@ class MoxyStreamer(Producer):
   def create_stream(cls, stream_info: dict) -> MoxyStream:
     return MoxyStream(**stream_info)
 
-
+  # TODO implement, but hard for moxy since dealy would depend per sensor
+  def _ping_device(self):
+    return 0
+  
   def _connect(self) -> bool:   
     self.node = CustomAntNode()
     self.node.set_network_key(0x00, ANTPLUS_NETWORK_KEY)
@@ -93,8 +98,8 @@ class MoxyStreamer(Producer):
 
     # local function to call when a device is found - also does the auto-create if enabled
     def on_found(device_tuple):
-        print("device found")
-        return
+      print("device found")
+      return
 
     self.scanner.on_found = on_found
     self.scanner.on_update = on_update
@@ -125,8 +130,8 @@ class MoxyStreamer(Producer):
               self.counter_per_sensor[device_id] = counter
         else:
           print("Unknown data type '%s': %r", data_type, data)
-      except Exception as _:
-        pass
+      except Exception as e:
+        print("Error: %s" % e)
     else:
       self._send_end_packet()
 

@@ -93,6 +93,7 @@ class Producer(Node):
     # Socket to publish sensor data and log
     self._pub: zmq.SyncSocket = self._ctx.socket(zmq.PUB)
     self._pub.connect("tcp://%s:%s" % (DNS_LOCALHOST, self._port_pub))
+    self._connect()
 
 
   # Connect to the sensor device(s).

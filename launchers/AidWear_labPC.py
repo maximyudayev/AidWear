@@ -15,10 +15,10 @@ if __name__ == '__main__':
     ('DotsStreamer',       False),  # The Dots lower limb tracking system
     ('EyeStreamer',        False),  # The Pupil Labs eye-tracking headset
     ('MicrophoneStreamer', False),  # One or more microphones
-    ('CameraStreamer',     True),  # One or more cameras
+    ('CameraStreamer',     False),  # One or more cameras
     ('InsoleStreamer',     False),  # The Moticon pressure insoles
     ('TmsiStreamer',       False),
-    ('MoxyStreamer',       False),
+    ('MoxyStreamer',       True),
     ('DummyProducer',      False),
     ('ViconStreamer',      False),
 
@@ -35,10 +35,7 @@ if __name__ == '__main__':
   ])
 
   classes_to_log = [
-    'DotsStreamer', 
-    'EyeStreamer', 
-    'InsoleStreamer', 
-    'CameraStreamer',
+    'MoxyStreamer', 
     ]
   classes_to_visualize = [
     'DotsStreamer',
@@ -80,11 +77,11 @@ if __name__ == '__main__':
   ###### PROCESS LAUNCH ######
   ############################
   # Create the broker and manage all the components of the experiment.
-  stream_broker: Broker = Broker(ip=IP_STATION,
+  stream_broker: Broker = Broker(ip=IP_BACKPACK,
                                  node_specs=local_producer_specs+local_consumer_specs+local_pipeline_specs,
                                  print_status=print_status, 
                                  print_debug=print_debug)
   # Connect broker to remote publishers at the wearable PC to get data from the wearable sensors.
-  stream_broker.connect_to_remote_pub(addr=IP_BACKPACK)
+  # stream_broker.connect_to_remote_pub(addr=IP_BACKPACK)
   # Run broker's main until user exits in GUI or Ctrl+C in terminal.
   stream_broker(duration_s=None)

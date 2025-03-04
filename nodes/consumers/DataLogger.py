@@ -14,7 +14,7 @@ from utils.zmq_utils import *
 ########################################################################
 class DataLogger(Consumer):
   @property
-  def _log_source_tag(self) -> str:
+  def _log_source_tag() -> str:
     return 'logger'
 
   def __init__(self,

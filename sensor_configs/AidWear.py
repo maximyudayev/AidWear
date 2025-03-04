@@ -101,6 +101,7 @@ producer_specs = [
                 "8524",
                 "8525"],
     'sampling_rate_hz': 0.5,
+    'transmit_delay_sample_period_s': 0.0,
     'print_debug': print_debug, 'print_status': print_status
     },
   # TMSi SAGA device.

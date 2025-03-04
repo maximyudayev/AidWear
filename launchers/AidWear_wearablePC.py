@@ -12,12 +12,13 @@ if __name__ == '__main__':
     ('ExperimentControlStreamer', False),  # A GUI to label activities/calibrations and enter notes
     # Sensors!
     ('AwindaStreamer',     False),  # The Awinda body tracking system (includes the Manus finger-tracking gloves if connected to Xsens)
-    ('DotsStreamer',       True),  # The Dots lower limb tracking system
-    ('EyeStreamer',        True),  # The Pupil Labs eye-tracking headset
+    ('DotsStreamer',       False),  # The Dots lower limb tracking system
+    ('EyeStreamer',        False),  # The Pupil Labs eye-tracking headset
     ('MicrophoneStreamer', False),  # One or more microphones
     ('CameraStreamer',     False),  # One or more cameras
-    ('InsoleStreamer',     True),  # The Moticon pressure insoles
+    ('InsoleStreamer',     False),  # The Moticon pressure insoles
     ('TmsiStreamer',       False),
+    ('MoxyStreamer',       True),
   ])
   # Remove disabled streamers.
   local_producer_specs = [spec for spec in producer_specs 
@@ -35,9 +36,9 @@ if __name__ == '__main__':
                                  node_specs=local_producer_specs+local_pipeline_specs,
                                  print_status=print_status, 
                                  print_debug=print_debug)
-  # Expose local wearable data to remote subscribers (e.g. lab PC in AidFOG project).
-  stream_broker.expose_to_remote_sub()
-  # Subscribe to the KILL signal of a remote machine.
-  stream_broker.subscribe_to_killsig(addr=IP_STATION)
+  # # Expose local wearable data to remote subscribers (e.g. lab PC in AidFOG project).
+  # stream_broker.expose_to_remote_sub()
+  # # Subscribe to the KILL signal of a remote machine.
+  # stream_broker.subscribe_to_killsig(addr=IP_STATION)
   # Run proxy/server's main.
   stream_broker(duration_s=None)

@@ -42,7 +42,7 @@ class Consumer(Node):
       class_args = streamer_spec.copy()
       del(class_args['class'])
       # Create the class object.
-      class_type: type[Producer] = (PRODUCERS+PIPELINES)[class_name]
+      class_type: type[Producer] = {**PRODUCERS,**PIPELINES}[class_name]
       class_object: Stream = class_type.create_stream(class_type, class_args)
       # Store the streamer object.
       self._streams.setdefault(class_type._log_source_tag, class_object)

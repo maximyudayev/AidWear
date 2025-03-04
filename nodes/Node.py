@@ -8,7 +8,7 @@ class NodeInterface(ABC):
   # Read-only property that every subclass must implement.
   @property
   @abstractmethod
-  def _log_source_tag(self) -> str:
+  def _log_source_tag() -> str:
     pass
 
   @property
@@ -82,7 +82,7 @@ class SyncState(NodeState):
     self._sync = context._get_sync_socket()
 
   def run(self):
-    self._sync.send_multipart([b'', self._context._log_source_tag.encode('utf-8')])
+    self._sync.send(self._context._log_source_tag.encode('utf-8'))
     self._sync.recv()
     self._context._set_state(RunningState(self._context))
 
@@ -184,7 +184,7 @@ class Node(NodeInterface):
 
     # Socket to indicate to broker that the subscriber is ready
     self._sync: zmq.SyncSocket = self._ctx.socket(zmq.REQ)
-    self._sync.connect("tcp://%s:%s" % (DNS_LOCALHOST, self._port_sync))
+    self._sync.connect("tcp://%s:%s" % (IP_BACKPACK, self._port_sync)) # TODO: do not hardcode the IP address, but use public IP
 
 
   def _get_sync_socket(self) -> zmq.SyncSocket:
