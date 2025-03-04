@@ -1,7 +1,7 @@
-from nodes import Node
-from producers import Producer
-from pipelines import PIPELINES
-from producers import PRODUCERS
+from nodes.Node import Node
+from nodes.producers.Producer import Producer
+from nodes.pipelines import PIPELINES
+from nodes.producers import PRODUCERS
 from streams import Stream
 
 from abc import abstractmethod

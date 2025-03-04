@@ -1,4 +1,4 @@
-from producers import Producer
+from nodes.producers.Producer import Producer
 from streams import MoxyStream
 
 from openant.easy.node import Node as AntNode

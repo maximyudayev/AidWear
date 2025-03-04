@@ -1,4 +1,4 @@
-from pipelines import Pipeline
+from nodes.pipelines.Pipeline import Pipeline
 
 import numpy as np
 import time

@@ -144,7 +144,7 @@ class Node(NodeInterface):
     return self.__is_done
   
 
-  @property.setter
+  @_is_done.setter
   def _is_done(self, done: bool) -> None:
     self.__is_done = done
 

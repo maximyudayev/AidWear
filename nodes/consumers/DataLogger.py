@@ -1,4 +1,4 @@
-from consumers import Consumer
+from nodes.consumers.Consumer import Consumer
 from handlers.LoggingHandler import Logger
 
 import threading
