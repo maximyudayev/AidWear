@@ -36,11 +36,12 @@ print_debug   : True
 
 
 host_ip : "127.0.0.1"
-remote_broker_ips: []
+
+remote_publisher_ips: []
+remote_subscriber_ips: []
 
 is_remote_kill: False
-
-is_expose_to_remote_sub: False # If current Broker produces data that other Brokers can listen to
+remote_kill_ip: null
 
 
 logging_spec:
@@ -50,8 +51,7 @@ logging_spec:
   stream_video    : False
   stream_audio    : False
   stream_period_s : 10 # how often to save streamed data to disk
-  clear_logged_data_from_memory: True # NOTE: IGNORED if dumping is also enabled below
-  
+
   # Choose whether to write all data at the end.
   #   Seems to be mutually exclusive with `stream_` options.
   dump_csv        : False
@@ -61,10 +61,9 @@ logging_spec:
   
   # Additional configuration.
   #   Choose whether to save media separately or as part of HDF5/CSV files.
-  videos_format   : "avi" # mp4 occasionally gets openCV errors about a tag not being supported?
   videos_in_hdf5  : False
   videos_in_csv   : False
-  videos_is_use_intel_api : False
+
   audio_format    : "wav" # currently only supports WAV
   audio_in_hdf5   : False
   audio_in_csv    : False
