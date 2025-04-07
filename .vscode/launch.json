@@ -58,6 +58,22 @@
       },
       "subProcess": true,
       // "justMyCode": true,
+    },
+    {
+      "name": "Vicon Cameras",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "args": [
+        "configs/RevalExo/vicon_cameras.yml"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "subProcess": true,
+      // "justMyCode": true,
     }
   ]
 }

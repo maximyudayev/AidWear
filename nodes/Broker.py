@@ -179,13 +179,8 @@ class SyncState(BrokerState):
   def run(self) -> None:
     sync_host_socket: zmq.SyncSocket = self._context._get_sync_host_socket()
     sync_remote_socket: zmq.SyncSocket = self._context._get_sync_remote_socket()
-<<<<<<< HEAD
-    num_expected_produce_connections: int = self._context._get_num_local_nodes() + (self._context._get_num_backends()-1)
-    count = 0
-=======
     num_left_to_sync: int = self._context._get_num_local_nodes() + (self._context._get_num_backends()-1)
     host_ip = self._context._get_host_ip()
->>>>>>> origin/main
     nodes = dict()
     # Receives SYNC requests from local Nodes and from remote Brokers that produce data to us.
     while num_left_to_sync:
@@ -260,16 +255,12 @@ class JoinState(BrokerState):
   def __init__(self, context: BrokerInterface):
     super().__init__(context)
     self._num_left_to_join: int = self._context._get_num_local_nodes() + (self._context._get_num_backends()-1)
-<<<<<<< HEAD
-    self._sync_socket: zmq.SyncSocket = self._context._get_sync_host_socket()
-=======
     self._remote_subscribers: list[str] = self._context._get_remote_subscribers()
     self._sync_host_socket: zmq.SyncSocket = self._context._get_sync_host_socket()
     self._sync_remote_socket: zmq.SyncSocket = self._context._get_sync_remote_socket()
     # register sync poller to listen for signals from brokers
     if self._context._get_remote_publishers():
       self._context._register_sync_socket_poller()
->>>>>>> origin/main
 
   # Wait for all processes (local and remote) to send the last messages before closing.
   #   Continue brokering packets until signalled by all publishers that there will be no more packets.
