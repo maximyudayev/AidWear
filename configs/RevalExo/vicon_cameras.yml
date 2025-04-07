@@ -18,9 +18,9 @@ logging_spec:
   # Choose whether to periodically write data to files.
   stream_hdf5     : True # recommended over CSV since it creates a single file
   stream_csv      : False # will create a CSV per stream
-  stream_video    : False
+  stream_video    : True
   stream_audio    : False
-  stream_period_s : 10 # how often to save streamed data to disk
+  stream_period_s : 1 # how often to save streamed data to disk
   clear_logged_data_from_memory: True # NOTE: IGNORED if dumping is also enabled below
   
   # Choose whether to write all data at the end.
@@ -62,7 +62,7 @@ consumer_specs:
       # Choose whether to periodically write data to files.
       stream_hdf5     : True # recommended over CSV since it creates a single file
       stream_csv      : False # will create a CSV per stream
-      stream_video    : False
+      stream_video    : True
       stream_audio    : False
       stream_period_s : 10 # how often to save streamed data to disk
       clear_logged_data_from_memory: True # NOTE: IGNORED if dumping is also enabled below

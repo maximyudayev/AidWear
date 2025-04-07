@@ -34,6 +34,8 @@ from utils.print_utils import *
 from utils.zmq_utils import *
 from collections import OrderedDict
 
+import av
+import cv2
 
 #######################################################
 #######################################################
@@ -89,6 +91,25 @@ class CameraStreamer(Producer):
                      print_status=print_status,
                      print_debug=print_debug)
 
+    frame_size = [2592, 1944]
+    fps = 20
+
+    self.counter = 0
+
+    self.output = av.open('output.mp4', mode='w')
+    self.stream = self.output.add_stream('h264')
+    self.stream.width = frame_size[0]
+    self.stream.height = frame_size[1]
+    self.stream.pix_fmt = 'yuv420p'
+
+    self.stream.options = {
+      'preset': 'medium',
+      'profile': 'high',
+      'rc': 'cbr',
+      'bitrate': '2M',
+      'g': '1',
+      'force-idr': '1'
+    }    
 
   def create_stream(cls, stream_info: dict) -> CameraStream:
     return CameraStream(**stream_info)
@@ -112,10 +133,9 @@ class CameraStreamer(Producer):
     self._cam_array: pylon.InstantCameraArray = pylon.InstantCameraArray(len(devices))
     for idx, cam in enumerate(self._cam_array):
       cam.Attach(self._tl.CreateDevice(devices[idx]))
-
+    
     # Connect to the cameras
     self._cam_array.Open()
-
     # Configure the cameras according to the user settings
     for idx, cam in enumerate(self._cam_array):
       # For consistency factory reset the devices
@@ -180,12 +200,30 @@ class CameraStreamer(Producer):
                      sequence_id: np.int64) -> None:
     time_s = time.time()
     tag: str = "%s.%s.data" % (self._log_source_tag(), self._camera_mapping[camera_id])
+
+    frame = np.ascontiguousarray(frame)
+    # Convert Bayer RGGB to RGB, then to YUV420P
+    frame_RGB = cv2.cvtColor(frame, cv2.COLOR_BayerRG2RGB)
+
+    # Create a PyAV VideoFrame from the YUV data
+    av_frame = av.VideoFrame.from_ndarray(frame_RGB, format='rgb24')
+    av_frame.pts = pts
+
+    packets = self.stream.encode(av_frame)
+    self.output.mux(packets)
     data = {
       'frame': (frame, is_keyframe, pts),
       'timestamp': timestamp,
       'frame_sequence': sequence_id
     }
-    self._publish(tag=tag, time_s=time_s, data={camera_id: data})
+    #self._publish(tag=tag, time_s=time_s, data={camera_id: data})
+    if pts == 200:
+      flush_packets = self.stream.encode(None)
+      for p in flush_packets:
+        self.output.mux(p)
+      self.output.close()
+      print('stop')
+
 
 
   def _stop_new_data(self) -> None:
