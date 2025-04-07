@@ -27,7 +27,7 @@
 
 from nodes.producers.Producer import Producer
 from streams import ViconStream
-from vicon_dssdk import ViconDataStream
+from handlers.vicon_dssdk import ViconDataStream
 from utils.print_utils import *
 from utils.zmq_utils import *
 
@@ -121,12 +121,25 @@ class ViconStreamer(Producer):
     devices = self._client.GetDeviceNames()
     # Keep only EMG. This device was renamed in the Nexus SDK
     self._devices = [d for d in devices if d[0] == "Cometa EMG"]
+    self._output_to_keep = ['EMG Channels']
     return True
 
 
   # Acquire data from the sensors until signalled externally to quit
   def _process_data(self) -> None:
     if self._is_continue_capture:
+      is_has_frame = False
+      timeout = 50
+      while not is_has_frame:
+        try:
+          if self._client.GetFrame():
+            is_has_frame = True
+          timeout -= 1
+          if timeout < 0:
+            print('Failed to get frame')
+        except ViconDataStream.DataStreamException as e:
+          pass
+
       time_s = time.time()
       frame_number = self._client.GetFrameNumber()
 
@@ -135,6 +148,7 @@ class ViconStreamer(Producer):
         all_results = []
         for output_name, component_name, unit in device_output_details:
           # NOTE: must set this ID in the Vicon software first.
+          if output_name not in self._output_to_keep: continue
           values, occluded = self._client.GetDeviceOutputValues(device_name, output_name, component_name)
           all_results.append(values)
           # Store the captured data into the data structure.
@@ -147,6 +161,7 @@ class ViconStreamer(Producer):
             'counter': frame_number,
             'latency': 0.0,
           }
+          print(f"Sample {sample}, nr: {frame_number}")
           self._publish(tag=tag, time_s=time_s, data={'vicon-data': data})
     elif not self._is_continue_capture:
       # If triggered to stop and no more available data, send empty 'END' packet and join.

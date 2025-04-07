@@ -26,6 +26,38 @@
       },
       "subProcess": true,
       // "justMyCode": true,
+    },
+    {
+      "name": "Vicon",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "args": [
+        "configs/RevalExo/vicon.yml"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "subProcess": true,
+      // "justMyCode": true,
+    },
+    {
+      "name": "Saga",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "args": [
+        "configs/RevalExo/saga.yml"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "subProcess": true,
+      // "justMyCode": true,
     }
   ]
 }
