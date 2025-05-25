@@ -28,14 +28,12 @@
 from nodes.producers.Producer import Producer
 from streams import CameraStream
 
-from handlers.BaslerHandler import ImageEventHandler
+from handlers.Basler.BaslerHandler import ImageEventHandler
 import pypylon.pylon as pylon
 from utils.print_utils import *
 from utils.zmq_utils import *
 from collections import OrderedDict
 
-import av
-import cv2
 
 #######################################################
 #######################################################
@@ -51,17 +49,14 @@ class CameraStreamer(Producer):
   def __init__(self,
                host_ip: str,
                logging_spec: dict,
-               camera_mapping: dict[str, str], # a dict mapping camera names to device indexes
+               camera_mapping: dict[str, str], # a dict mapping camera names to device indexes.
                fps: float,
                resolution: tuple[int],
-               camera_config_filepath: str, # path to the pylon .pfs config file to reproduce desired camera setup
                pylon_max_buffer_size: int = 10,
                port_pub: str = PORT_BACKEND,
                port_sync: str = PORT_SYNC_HOST,
                port_killsig: str = PORT_KILL,
-               transmit_delay_sample_period_s: float = None,
-               print_status: bool = True,
-               print_debug: bool = False,
+               transmit_delay_sample_period_s: float = float('nan'),
                timesteps_before_solidified: int = 0,
                **_):
 
@@ -69,10 +64,9 @@ class CameraStreamer(Producer):
     camera_names, camera_ids = tuple(zip(*(camera_mapping.items())))
     self._camera_mapping: OrderedDict[str, str] = OrderedDict(zip(camera_ids, camera_names))
     self._pylon_max_buffer_size = pylon_max_buffer_size
-    self._camera_config_filepath = camera_config_filepath
     self._fps = fps
     self._get_frame_fn = self._get_frame
-    self._stop_time_s = None
+    self._stop_time_s = float('nan')
 
     stream_info = {
       "camera_mapping": camera_mapping,
@@ -84,33 +78,14 @@ class CameraStreamer(Producer):
     super().__init__(host_ip=host_ip,
                      stream_info=stream_info,
                      logging_spec=logging_spec,
+                     sampling_rate_hz=fps,
                      port_pub=port_pub,
                      port_sync=port_sync,
                      port_killsig=port_killsig,
-                     transmit_delay_sample_period_s=transmit_delay_sample_period_s,
-                     print_status=print_status,
-                     print_debug=print_debug)
+                     transmit_delay_sample_period_s=transmit_delay_sample_period_s)
 
-    frame_size = [2592, 1944]
-    fps = 20
 
-    self.counter = 0
-
-    self.output = av.open('output.mp4', mode='w')
-    self.stream = self.output.add_stream('h264')
-    self.stream.width = frame_size[0]
-    self.stream.height = frame_size[1]
-    self.stream.pix_fmt = 'yuv420p'
-
-    self.stream.options = {
-      'preset': 'medium',
-      'profile': 'high',
-      'rc': 'cbr',
-      'bitrate': '2M',
-      'g': '1',
-      'force-idr': '1'
-    }    
-
+  @classmethod
   def create_stream(cls, stream_info: dict) -> CameraStream:
     return CameraStream(**stream_info)
 
@@ -122,53 +97,54 @@ class CameraStreamer(Producer):
   def _connect(self) -> bool:
     tlf: pylon.TlFactory = pylon.TlFactory.GetInstance()
 
-    # Get Transport Layer for just the GigE Basler cameras
+    # Get Transport Layer for just the GigE Basler cameras.
     self._tl: pylon.TransportLayer = tlf.CreateTl('BaslerGigE')
 
-    # Filter discovered cameras by user-defined serial numbers
+    # Filter discovered cameras by user-defined serial numbers.
     devices: list[pylon.DeviceInfo] = [d for d in self._tl.EnumerateDevices() if d.GetSerialNumber() in self._camera_mapping.keys()]
 
-    # Instantiate cameras
+    # Instantiate cameras.
     cam: pylon.InstantCamera
     self._cam_array: pylon.InstantCameraArray = pylon.InstantCameraArray(len(devices))
-    for idx, cam in enumerate(self._cam_array):
+    for idx, cam in enumerate(self._cam_array): # type: ignore
       cam.Attach(self._tl.CreateDevice(devices[idx]))
-    
-    # Connect to the cameras
+
+    # Connect to the cameras.
     self._cam_array.Open()
-    # Configure the cameras according to the user settings
-    for idx, cam in enumerate(self._cam_array):
-      # For consistency factory reset the devices
-      cam.UserSetSelector = "Default"
-      cam.UserSetLoad.Execute()
 
+    # Configure the cameras according to the user settings.
+    for idx, cam in enumerate(self._cam_array): # type: ignore
+      # For consistency load persistent settings stored in the camera.
+      # NOTE: avoid overwriting this user set in Pylon viewer.
+      # cam.UserSetSelector = "UserSet1"
+      # cam.UserSetLoad.Execute()
+
+      # Preload persistent feature configurations saved to a file (easier configuration of all cameras).
+      # if self._camera_config_filepath is not None: 
+      #   pylon.FeaturePersistence.Load(self._camera_config_filepath, cam.GetNodeMap())
       # Optionally configure ring buffer size if grabbing is slowed down by color conversion.
-      # cam.OutputQueueSize = 2*self._fps # The size of the grab result buffer output queue
-      # cam.MaxNumGrabResults = ? # The maximum number of grab results available at any time during a grab session
+      # cam.OutputQueueSize = 2*self._fps # The size of the grab result buffer output queue.
+      # cam.MaxNumGrabResults = ? # The maximum number of grab results available at any time during a grab session.
       # cam.MaxNumQueuedBuffer = self._pylon_max_buffer_size # The maximum number of buffers that are queued in the stream grabber input queue.
-      # cam.MaxNumBuffer = self._pylon_max_buffer_size # The maximum number of buffers that are allocated and used for grabbingam.MaxNumBuffer = self._pylon_max_buffer_size
-
-      # Preload persistent feature configurations saved to a file (easier configuration of all cameras)
-      if self._camera_config_filepath is not None: 
-        pylon.FeaturePersistence.Load(self._camera_config_filepath, cam.GetNodeMap())
+      # cam.MaxNumBuffer = self._pylon_max_buffer_size # The maximum number of buffers that are allocated and used for grabbingam.MaxNumBuffer = self._pylon_max_buffer_size.
       
-      # Assign an ID to each grabbed frame, corresponding to the host device
+      # Assign an ID to each grabbed frame, corresponding to the host device.
       cam.SetCameraContext(idx)
       
-      # Enable PTP to sync cameras between each other for Synchronous Free Running at the specified frame rate
-      cam.PtpEnable.SetValue(True)
+      # # Enable PTP to sync cameras between each other for Synchronous Free Running at the specified frame rate.
+      # cam.PtpEnable.SetValue(True)
 
-      # Verify that the slave device are sufficiently synchronized
-      while cam.PtpServoStatus.GetValue() != "Locked":
-        # Execute clock latch 
-        cam.PtpDataSetLatch.Execute()
-        time.sleep(2)
+      # # Verify that the slave device are sufficiently synchronized.
+      # while cam.PtpServoStatus.GetValue() != "Locked":
+      #   # Execute clock latch.
+      #   cam.PtpDataSetLatch.Execute()
+      #   time.sleep(2)
 
-    # Instantiate callback handler
+    # Instantiate callback handler.
     self._image_handler = ImageEventHandler(cam_array=self._cam_array)
 
-    # Start asynchronously capturing images with a background loop
-    # https://docs.baslerweb.com/pylonapi/cpp/pylon_programmingguide#the-default-grab-strategy-one-by-one
+    # Start asynchronously capturing images with a background loop.
+    # https://docs.baslerweb.com/pylonapi/cpp/pylon_programmingguide#the-default-grab-strategy-one-by-one.
     self._cam_array.StartGrabbing(pylon.GrabStrategy_LatestImages, pylon.GrabLoop_ProvidedByInstantCamera)
     return True
 
@@ -183,7 +159,7 @@ class CameraStreamer(Producer):
 
 
   def _get_frame_stopped(self) -> None:
-    is_timeout = (time.time() - self._stop_time_s) < 5
+    is_timeout = (get_time() - self._stop_time_s) > 5
     if buf := self._image_handler.get_frame():
       self._process_frame(*buf)
     elif is_timeout and not self._is_continue_capture:
@@ -191,54 +167,43 @@ class CameraStreamer(Producer):
       self._send_end_packet()
 
 
-  def _process_frame(self, 
-                     camera_id: str, 
-                     frame: np.ndarray,
+  def _keep_samples(self) -> None:
+    self._image_handler.keep_data()
+
+
+  def _process_frame(self,
+                     camera_id: str,
+                     frame_buffer: bytes,
                      is_keyframe: bool,
-                     pts: int,
-                     timestamp: np.uint64, 
-                     sequence_id: np.int64) -> None:
-    time_s = time.time()
+                     frame_index: np.uint64,
+                     timestamp: np.uint64,
+                     sequence_id: np.uint64,
+                     toa_s: float) -> None:
+    process_time_s = get_time()
     tag: str = "%s.%s.data" % (self._log_source_tag(), self._camera_mapping[camera_id])
-
-    frame = np.ascontiguousarray(frame)
-    # Convert Bayer RGGB to RGB, then to YUV420P
-    frame_RGB = cv2.cvtColor(frame, cv2.COLOR_BayerRG2RGB)
-
-    # Create a PyAV VideoFrame from the YUV data
-    av_frame = av.VideoFrame.from_ndarray(frame_RGB, format='rgb24')
-    av_frame.pts = pts
-
-    packets = self.stream.encode(av_frame)
-    self.output.mux(packets)
     data = {
-      'frame': (frame, is_keyframe, pts),
-      'timestamp': timestamp,
-      'frame_sequence': sequence_id
+      'frame_timestamp': timestamp,
+      'frame_index': frame_index,
+      'frame_sequence_id': sequence_id,
+      'frame': (frame_buffer, is_keyframe, frame_index),
+      'toa_s': toa_s
     }
-    #self._publish(tag=tag, time_s=time_s, data={camera_id: data})
-    if pts == 200:
-      flush_packets = self.stream.encode(None)
-      for p in flush_packets:
-        self.output.mux(p)
-      self.output.close()
-      print('stop')
-
+    self._publish(tag=tag, process_time_s=process_time_s, data={camera_id: data})
 
 
   def _stop_new_data(self) -> None:
-    # Stop capturing data
+    # Stop capturing data.
     self._cam_array.StopGrabbing()
-    # Change the callback to use a timeout for checking the queue for new packets
-    self._stop_time_s = time.time()
+    # Change the callback to use a timeout for checking the queue for new packets.
+    self._stop_time_s = get_time()
     self._get_frame_fn = self._get_frame_stopped
 
 
   def _cleanup(self) -> None:
-    # Remove background loop event listener
+    # Remove background loop event listener.
     cam: pylon.InstantCamera
     for cam in self._cam_array: 
       cam.DeregisterImageEventHandler(self._image_handler)
-    # Disconnect from the camera
+    # Disconnect from the camera.
     self._cam_array.Close()
     super()._cleanup()
